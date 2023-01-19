@@ -19,14 +19,24 @@ namespace AllSkyAIRestServer.Net
 
     internal class Classify
     {
+        System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
+        InferenceSession session;
+        Configuration configuration = new Configuration();
+
+        public Classify()
+        {
+            string modelFilePath = ".\\model\\"+configuration.Model; 
+            session = new InferenceSession(modelFilePath);
+        }
 
         public string ClassifyImage(string url)
         {
-            //string imageUrl = @"https://allsky.tristarobservatory.com/image.jpg";
             string saveLocation = @".\\tmp.jpg";
 
             Console.WriteLine($"Downloading AllSkyImage: {url}");
 
+            watch.Reset();
+            watch.Start();
             HttpWebRequest lxRequest = (HttpWebRequest)WebRequest.Create(url);
             // returned values are returned as a stream, then read into a string
             String lsResponse = string.Empty;
@@ -41,11 +51,11 @@ namespace AllSkyAIRestServer.Net
                     }
                 }
             }
-            Console.WriteLine("Download done, classifying image...");
+            watch.Stop();
+            Console.WriteLine($"Download done in {TimeSpan.FromMilliseconds(watch.ElapsedMilliseconds).TotalSeconds}s, classifying image...");
 
-            // Read paths
-            string modelFilePath = @".\model\allskyai_tristar.onnx"; //args[0];
-            //string imageFilePath = @"D:\Development\AllSkyAI_Dev\AllSkyAI_Local\images\heavy_clouds.jpg"; //args[1];
+            watch.Reset();
+            watch.Start();
 
             // Read image
             Image<Rgb24> image = Image.Load<Rgb24>(saveLocation);
@@ -73,7 +83,6 @@ namespace AllSkyAIRestServer.Net
             };
 
             // Run inference
-            var session = new InferenceSession(modelFilePath);
             IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.Run(inputs);
 
             // Postprocess to get softmax vector
@@ -85,17 +94,14 @@ namespace AllSkyAIRestServer.Net
             IEnumerable<Prediction> classificationScore = softmax.Select((x, i) => new Prediction { Label = LabelMap.Labels[i], Confidence = x })
                                .OrderByDescending(x => x.Confidence)
                                .Take(1);
-            /*
-            // Print results to console
-            Console.WriteLine("Top 5 predictions for ResNet50 v2...");
-            Console.WriteLine("--------------------------------------------------------------");
-            foreach (var t in top10)
-            {
-                Console.WriteLine($"Label: {t.Label}, Confidence: {t.Confidence}");
-            }
-            */
-            var conf = (classificationScore.First().Confidence*100f).ToString().Replace(",", ".");
 
+            watch.Stop();
+
+            var conf = (classificationScore.First().Confidence * 100f).ToString().Replace(",", ".");
+            
+            Console.WriteLine($"Label: {classificationScore.First().Label}, Confidence: {classificationScore.First().Confidence}");
+            Console.WriteLine($"Classification done in {TimeSpan.FromMilliseconds(watch.ElapsedMilliseconds).TotalSeconds}s");
+            
             return ("{"+$"\"AllSkyAISky\": \"{classificationScore.First().Label}\", \"AllSkyAIConfidence:\" {conf}" + "}");
 
         }
